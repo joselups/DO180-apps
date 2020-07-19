@@ -1,0 +1,170 @@
+oc cluster-info
+
+oc debug node/nombre-nodo
+oc adm top nodes  ---- Presenta el uso actual de la CPU y la memoria
+oc describe node my-node-name
+oc get clusterversion
+oc describe clusterversion
+oc get clusteroperators
+oc adm node-logs -u kubelet my-node-name
+oc adm node-logs my-node-name
+
+Apertura de un prompt de shell en un nodo de OpenShift
+[user@demo ~]$ oc debug node/my-node-name
+...output omitted...
+sh-4.2# chroot /host
+sh-4.2# systemctl is-active kubelet
+active
+
+Ver contenedores dentro de un nodo
+oc describe node
+
+[user@demo ~]$ oc debug node/my-node-name
+...output omitted...
+sh-4.2# chroot /host
+sh-4.2# crictl ps
+
+Logs de un contenedor
+oc logs my-pod-name
+oc logs my-pod-name -c my-container-name    ---- Si un pod tiene mas de un contenedor
+
+Creación de pods de solución de problemas
+oc debug deployment/my-deployment-name --as-root
+
+Abrir una shell dentro de un pod
+oc rsh nombre-de-mi-pod
+
+Copia archivos locales en una ubicación dentro de un pod
+oc cp /local/path nombre-de-mi-pod:/container/path
+
+Crea un túnel TCP entre local-port en su estación de trabajo y local-port en el pod.
+oc port-forward nombre-de-mi-pod local-port:remote-port
+
+
+Loglevel (de 6 hasta 10)
+oc get pod --loglevel 6
+oc get pod --loglevel 10
+
+Descrubir token que usa mi oc
+oc whoami -t
+Se puede usar para imprimir la api mediante curl
+curl 'https://api.ocp-lnjmqodepmrdnqq200716.do280.rht-eu.nextcle.com:6443/api/v1/' \
+  -H "Authorization: Bearer $TOKEN" \
+  --insecure
+  
+  
+  
+Actualización del recurso personalizado de OAuth
+[user@demo ~]$ oc get -o yaml oauth cluster > oauth.yaml
+...
+spec:
+ identityProviders:
+ - name: my_htpasswd_provider
+ mappingMethod: claim
+ type: HTPasswd
+ htpasswd:
+ fileData:
+ name: htpasswd-secret 
+[user@demo ~]$ oc replace -f oauth.yaml
+
+
+
+Creación de un secreto
+Crear htpasswd
+$ htpasswd -c -B -b /tmp/htpasswd student redhat123
+Eliminar un usuario
+$ htpasswd -D /tmp/htpasswd student
+
+$ oc create secret generic htpasswd-secret \
+ --from-file htpasswd=/tmp/htpasswd -n openshift-config
+
+
+Actualizacion de secreto
+[user@demo ~]$ oc create secret generic htpasswd-secret --from-file htpasswd=/tmp/htpasswd --dry-run -o yaml \
+ | oc replace -n openshift-config -f -
+ 
+$ watch oc get pods -n openshift-authentication
+
+Extraer un htpasswd
+$ oc extract secret/htpasswd-secret -n openshift-config \
+--to - > /tmp/htpasswd
+
+Eliminar usuario de identidad
+$ htpasswd -D /tmp/htpasswd manager
+
+$ oc create secret generic htpasswd-secret \
+> --from-file htpasswd=/tmp/htpasswd --dry-run -o yaml \
+> | oc replace -n openshift-config -f -
+
+$ oc delete user manager
+
+Buscar el usuario en la identidad ey eliminarlo
+$ oc get identities | grep manager
+my_htpasswd_provider:manager my_htpasswd_provider manager manager ...
+$ oc delete identity my_htpasswd_provider:manager
+identity.user.openshift.io "my_htpasswd_provider:manager" deleted
+
+Asignación de privilegios administrativos
+$ oc adm policy add-cluster-role-to-user cluster-admin student
+
+
+
+Control de acceso
+
+
+admin ---- Los usuarios con este rol pueden administrar todos los recursos del proyecto, incluso otorgar acceso al proyecto a otros usuarios.
+basic-user ---- Los usuarios con este rol tienen acceso de lectura al proyecto.
+cluster-admin ---- Los usuarios con este rol tienen acceso de superusuario a los recursos del clúster. Estos usuarios pueden realizar cualquier acción en el clúster y tienen control total de todos los proyectos.
+cluster-status ---- Los usuarios con este rol pueden obtener información sobre el estado del clúster.
+edit ---- Los usuarios con este rol pueden crear, modificar o eliminar recursos de aplicaciones comunes del proyecto, como opciones de configuración de servicios e implementación. No pueden actuar sobre recursos de administración, como cuotas y rangos límite, y no pueden administrar permisos de acceso al
+proyecto.
+self-provisioner ---- Los usuarios con este rol pueden crear nuevos proyectos. Este es un rol de clúster, no un rol de proyecto.
+view ---- Los usuarios con este rol pueden ver los recursos del proyecto, pero no pueden modificar los recursos del proyecto.
+
+$ oc get clusterrolebinding
+$ oc get rolebinding
+
+$ oc adm policy add-role-to-user basic-user dev -n wordpress
+
+Utilizar secretos para env
+$ oc create secret generic mysql \
+> --from-literal user=myuser --from-literal password=redhat123 \
+> --from-literal database=test_secrets --from-literal hostname=mysql 
+
+$ oc new-app --name mysql \
+> --docker-image registry.access.redhat.com/rhscl/mysql-57-rhel7:5.7-47
+
+$ oc set env dc/mysql --prefix MYSQL_ \
+> --from secret/mysql
+
+
+Restricciones de contexto de seguridad (SCC)
+
+oc get scc
+oc get serviceaccount
+$ oc create serviceaccount gitlab-sa
+$ oc adm policy add-scc-to-user anyuid -z gitlab-sa
+$ oc set serviceaccount deploymentconfig gitlab gitlab-sa
+
+Ver todas las restricciones de contexto de seguridad que se pueden usar para sortear las limitaciones de un contenedor
+$ oc get pod podname -o yaml | oc adm policy scc-subject-review -f -
+
+
+Network
+
+Verificar que los svc tienen bien los selectores para el correcto direccionamiento
+
+Hay 3 modos de red: subnet, multitenant y NetworkPolicy (default)
+$ oc describe dns.operator/default
+
+Gestion de trafico: Ingress (resource), External load balancer (service type), Service external IP (service type), NodePort (service type)
+
+Rutas seguras de OpenShift:
+	Edge: El enrutador otorga los certificados TLS, por lo que debe configurarlos en la ruta; de lo contrario, OpenShift asigna su propio certificado al enrutador para la finalización de TLS.
+	Pass-through: el tráfico cifrado se envía directamente al pod de destino,  la aplicación es responsable de proporcionar certificados para el tráfico
+	Re-encryption:  el enrutador finaliza el TLS con un certificado y, luego, recifra su conexión al extremo
+	
+
+$ oc create route edge https --service todo-http --hostname https.${RHT_OCP4_WILDCARD_DOMAIN}
+$ oc extract secrets/router-ca --keys tls.crt -n openshift-ingress-operator
+
