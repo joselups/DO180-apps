@@ -178,7 +178,7 @@ $ openssl x509 -req -in training.csr -passin file:passphrase.txt -CA training-CA
 
 $ oc create secret tls todo-certs --cert=certs/training.crt --key=certs/training.key
 $ oc create route passthrough https --service todo-https --port 8443 --hostname https.${RHT_OCP4_WILDCARD_DOMAIN}
-$ oc set volume dc/lamp --add --secret-name=todo-certs --mount-path=tls-certs
+$ oc set volume dc/lamp --add --name=tls-certs --type=secret --secret-name=todo-certs --mount-path=/usr/local/etc/ssl/certs
 
 Con passthrough los certificados se pasan al pod mediante un volume
 spec:
