@@ -31,6 +31,9 @@ oc logs my-pod-name -c my-container-name    ---- Si un pod tiene mas de un conte
 Creación de pods de solución de problemas
 oc debug deployment/my-deployment-name --as-root
 
+Crear un pod debug con imagen modificada para tener herramientas
+$ oc debug -t deployment/todo-http --image registry.access.redhat.com/ubi8/ubi:8.0
+
 Abrir una shell dentro de un pod
 oc rsh nombre-de-mi-pod
 
@@ -160,11 +163,30 @@ $ oc describe dns.operator/default
 Gestion de trafico: Ingress (resource), External load balancer (service type), Service external IP (service type), NodePort (service type)
 
 Rutas seguras de OpenShift:
-	Edge: El enrutador otorga los certificados TLS, por lo que debe configurarlos en la ruta; de lo contrario, OpenShift asigna su propio certificado al enrutador para la finalización de TLS.
+	Edge: El enrutador otorga los certificados TLS, por lo que debe configurarlos en la ruta; de lo contrario, OpenShift asigna su propio certificado al enrutador para la finalización de TLS. Cifran el tráfico entre el cliente y el enrutador
 	Pass-through: el tráfico cifrado se envía directamente al pod de destino,  la aplicación es responsable de proporcionar certificados para el tráfico
 	Re-encryption:  el enrutador finaliza el TLS con un certificado y, luego, recifra su conexión al extremo
 	
 
 $ oc create route edge https --service todo-http --hostname https.${RHT_OCP4_WILDCARD_DOMAIN}
 $ oc extract secrets/router-ca --keys tls.crt -n openshift-ingress-operator
+
+AYUDA: $ man req
+$ openssl genrsa -out training.key 2048
+$ openssl req -new -subj "/C=US/ST=North Carolina/L=Raleigh/O=Red Hat/\CN=https.${RHT_OCP4_WILDCARD_DOMAIN}" -key training.key -out training.csr
+$ openssl x509 -req -in training.csr -passin file:passphrase.txt -CA training-CA.pem -CAkey training-CA.key -CAcreateserial -out training.crt -days 1825 -sha256 -extfile training.ext
+
+$ oc create secret tls todo-certs --cert=certs/training.crt --key=certs/training.key
+$ oc create route passthrough https --service todo-https --port 8443 --hostname https.${RHT_OCP4_WILDCARD_DOMAIN}
+$ oc set volume dc/lamp --add --secret-name=todo-certs --mount-path=tls-certs
+
+Con passthrough los certificados se pasan al pod mediante un volume
+spec:
+...
+volumes:
+- name: tls-certs
+  secret:
+    secretName: todo-certs
+...
+
 

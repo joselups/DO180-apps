@@ -1,0 +1,15 @@
+Creacion de un template con varias parametros
+$ oc new-app ruby-helloworld-sample -p ADMIN_USERNAME=admin,ADMIN_PASSWORD=mypassword
+
+Creando varias contenedores en un pod
+$ oc new-app nginx+mysql
+$ oc new-app \
+    ruby~https://github.com/openshift/ruby-hello-world \
+    mysql \
+    --group=ruby+mysql
+	
+oc new-app \
+httpd \
+mysql -e MYSQL_USER=test -e MYSQL_PASSWORD=test1234 -e MYSQL_DATABASE=test \
+--group=httpd+mysql \
+--name lamp

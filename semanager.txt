@@ -1,0 +1,40 @@
+﻿A continuación se describe una manera de configurar el directorio del host:
+
+Cree un directorio con el propietario y grupo root:
+
+[student@workstation ~]$ sudo mkdir /var/dbfiles 
+El usuario que ejecuta procesos en el contenedor debe ser capaz de escribir archivos en el directorio. Si la máquina del host no tiene el mismo usuario exacto definido, el permiso debe definirse con el ID de usuario numérico (UID) desde el contenedor. En el caso del servicio MySQL provisto por Red Hat, el UID es 27:
+
+[student@workstation ~]$ sudo chown -R 27:27 /var/dbfiles
+Aplique el contexto de container_file_t al directorio (y a todos los subdirectorios) para permitir que los contenedores accedan a todo su contenido.
+
+[student@workstation ~]$ sudo semanage fcontext -a -t container_file_t '/var/dbfiles(/.*)?'
+Aplique la política de contenedores de SELinux que configuró en el primer paso al directorio recién creado:
+
+[student@workstation ~]$ sudo restorecon -Rv /var/dbfiles 
+
+Forma rapida
+sudo chcon -Rt container_file_t /home/student/work
+
+
+Llamada a un template
+
+$ oc process -f mysql-persistent-template.yaml \
+> -p MYSQL_USER=dev -p MYSQL_PASSWORD=$P4SSD -p MYSQL_DATABASE=bank \
+> -p VOLUME_CAPACITY=10Gi | oc create -f -
+
+$ oc new-app --template=mysql-persistent \
+> -p MYSQL_USER=dev -p MYSQL_PASSWORD=$P4SSD -p MYSQL_DATABASE=bank \
+> -p VOLUME_CAPACITY=10Gi
+
+$ oc process openshift//mysql-persistent \
+> -p MYSQL_USER=dev -p MYSQL_PASSWORD=$P4SSD -p MYSQL_DATABASE=bank \
+> -p VOLUME_CAPACITY=10Gi | oc create -f -
+
+Solución de problemas de permisos
+
+[student@workstation ~]$ oc adm policy add-scc-to-user anyuid -z default
+Este comando oc adm policy permite a OpenShift ejecutar procesos de contenedor con
+usuarios que no son root. Sin embargo, los sistemas de archivos usados en el contenedor también
+deben estar disponibles para el usuario en ejecución. Esto es especialmente importante cuando el
+contenedor contiene montajes de volumen.
