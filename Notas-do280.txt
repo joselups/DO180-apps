@@ -1,3 +1,9 @@
+$ oc explain limitranges.spec.limits
+$ oc explain deployment.spec.template.spec.nodeSelector
+$ oc api-resources
+
+
+
 oc cluster-info
 
 oc debug node/nombre-nodo
@@ -33,6 +39,9 @@ oc debug deployment/my-deployment-name --as-root
 
 Crear un pod debug con imagen modificada para tener herramientas
 $ oc debug -t deployment/todo-http --image registry.access.redhat.com/ubi8/ubi:8.0
+
+Ver si existe una imagen
+skopeo inspect docker://registry.access.redhat.com/rhscl/postgresql-96-rhel7:1
 
 Abrir una shell dentro de un pod
 oc rsh nombre-de-mi-pod
@@ -155,7 +164,11 @@ $ oc get pod podname -o yaml | oc adm policy scc-subject-review -f -
 
 Network
 
-Verificar que los svc tienen bien los selectores para el correcto direccionamiento
+IMPORTANTE: Verificar que los svc tienen bien los selectores para el correcto direccionamiento (label name igual que el nombre svc)
+			Crear pod debug (oc debug -t deployment {nombre}) y probar si llega tanto a la ip de cluster como a la privada.
+			Ip privada se saca con oc get nodes -o wide
+			Ip cluster se saca con oc get service
+			
 
 Hay 3 modos de red: subnet, multitenant y NetworkPolicy (default)
 $ oc describe dns.operator/default
@@ -190,3 +203,190 @@ volumes:
 ...
 
 
+Control de programacion
+
+Etiquetado de nodos
+Agregar etiqueta
+$ oc label node node1.us-west-1.compute.internal env=dev [--overwrite]
+Eliminar etiqueta
+$ oc label node node1.us-west-1.compute.internal env-
+Mostrar el valor de una etiqueta en todos los nodos
+$ oc get node -L failure-domain.beta.kubernetes.io/region -L env
+
+Etiquetado de machines
+Relacion de maquinas y nodos
+$ oc get machines -n openshift-machine-api -o wide
+Mostrar la machineset desde donde se generan las demás
+$ oc get machineset -n openshift-machine-api
+Modificar los tag para que cuando genere una nueva machine desde la machineset se genere ese tag
+$ oc edit machineset ocp-qz7hf-worker-us-west-1b -n openshift-machine-api
+...
+spec:
+  metadata:
+    creationTimestamp: null
+    labels:
+      env: dev
+   providerSpec:
+...
+
+
+$ oc adm new-project demo --node-selector "tier=1"
+Agregar un selector de nodo predeterminado a un proyecto
+$ oc annotate namespace demo openshift.io/node-selector="tier=2" --overwrite
+
+Modificar deployment para que seletor env
+$ oc label node ip-10-0-152-96.us-east-2.compute.internal env=prod
+$ oc edit deployment/hello
+...output omitted...
+     terminationMessagePath: /dev/termination-log
+     terminationMessagePolicy: File
+   dnsPolicy: ClusterFirst
+   nodeSelector:
+     env: dev
+   restartPolicy: Always
+...output omitted...
+
+IMPORTANTE: Ver si el deploy tiene nodeSelector y ver is los nodos tambien tienen los label
+AYUDA: $ oc explain deployment.spec.template.spec.nodeSelector
+
+Limite de recursos
+
+LINK: https://access.redhat.com/documentation/en-us/openshift_container_platform/4.2/html/nodes/working-with-clusters#nodes-cluster-resource-configure-request-limit_nodes-cluster-resource-configure
+
+Hay dos definiciones:
+	- Definición de solicitudes
+	- límites de recursos para pods
+
+IMPORTANTE
+$ oc set resources deployment hello-world-nginx --requests cpu=10m,memory=20Mi --limits cpu=80m,memory=100Mi
+
+Aplicación de cuotas
+
+Hay dos tipos de recursos:
+	- Recuentos de objetos: La cantidad de recursos de Kubernetes, como pods, servicios y rutas.
+	- Recursos de cómputo: La cantidad de recursos de hardware físicos y virtuales, como CPU, memoria y capacidad de almacenamiento.
+
+
+Quota para proyecto
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+ name: dev-quota
+spec:
+ hard:
+   services: "10"
+   cpu: "1300m"
+   memory: "1.5Gi"
+
+$ oc create --save-config -f dev-quota.yml
+
+$ oc create quota dev-quota --hard services=10,cpu=1300,memory=1.5Gi
+$ oc delete resourcequota QUOTA
+
+IMPORTANTE: Revisar si un proyecto tiene quota
+NOTA: Si hay 20 pods en running y se configura un quota de 15 pods, no se eliminan los 5 pods restantes. Solo hace efecto para los nuevos despliegues.
+
+Quota de rango para pods
+
+...
+spec:
+ limits:
+ - type: "Pod"
+   max:
+     cpu: "500m"
+     memory: "750Mi"
+   min:
+     cpu: "10m"
+     memory: "5Mi"
+ - type: "Container"
+   default:
+     cpu: "100m"
+     memory: "100Mi"
+   max:
+     cpu: "500m"
+     memory: "750Mi"
+   min:
+     cpu: "10m"
+     memory: "5Mi"
+...
+$ oc create --save-config -f dev-limits.yml
+$ oc describe limitrange dev-limits
+$ oc delete limitrange dev-limits
+
+AYUDA: $ oc explain limitranges.spec.limits
+
+
+
+Cuotas a varios proyectos
+
+$ oc create clusterquota user-qa \
+ --project-annotation-selector openshift.io/requester=qa \
+ --hard pods=12,secrets=20
+
+$ oc create clusterquota env-qa \
+ --project-label-selector environment=qa \
+ --hard pods=10,services=5
+
+$ oc delete clusterquota QUOTA
+
+
+Escalado de aplicaciones
+
+Escalamiento manual
+$ oc scale --replicas 5 deployment/scale
+
+Escalamiento automático (autoscaling) 
+$ oc autoscale dc/hello --min 1 --max 10 --cpu-percent 80
+$ oc get hpa
+
+
+Escalamiento de cluster
+Existe MachineAutoscaler y ClusterAutoscaler
+
+Escalamiento manual
+$ oc scale --replicas=2 machineset MACHINE-SET -n openshift-machine-api
+
+
+Escalamiento automatico : hace falta MachineAutoscaler y ClusterAutoscaler
+
+- Si el recurso MachineAutoscaler debe escalarse, comprueba si existe un recurso
+ClusterAutoscaler. Si no existe, no se produce ningún escalamiento.
+- Si existe un recurso ClusterAutoscaler, el recurso MachineAutoscaler evalúa
+si la adición de la nueva máquina infringe cualquiera de los límites definidos en
+ClusterAutoscaler.
+
+ClusterAutoScaler: limita los nodos, memoria y cpu del cluster
+MachineAutoScaler: limita el min y max de machines
+
+
+ClusterAutoScaler
+
+apiVersion: "autoscaling.openshift.io/v1"
+kind: "ClusterAutoscaler"
+metadata:
+name: "default"
+spec:
+podPriorityThreshold: -10
+resourceLimits:
+maxNodesTotal: 6
+scaleDown:
+enabled: true
+delayAfterAdd: 3m
+unneededTime: 3m
+
+
+MachineAutoScaler
+
+apiVersion: "autoscaling.openshift.io/v1beta1"
+kind: "MachineAutoscaler"
+metadata:
+name: "scale-automatic"
+namespace: "openshift-machine-api"
+spec:
+minReplicas: 1
+maxReplicas: 3
+scaleTargetRef:
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+name: MACHINE-SET-NAME
