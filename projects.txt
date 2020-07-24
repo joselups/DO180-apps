@@ -1,0 +1,17 @@
+plantillas en el project openshif
+identidades y secret en el project openshif-config
+certificado-ca en el project openshift-ingress-operator
+machine y machineset en el project  openshift-machine-api
+
+
+
+Permite crear nuevos proyectos
+$ oc adm policy add-cluster-role-to-group self-provisioner leaders
+
+
+
+
+Un pod con dos contenedores y cada contenedor con diferentes puertos hay que crear un servicio para el contenedor especificando solo el puerto y el selection
+
+
+¿Como crear una aplicacion desde un dockerfile en gitlab y con content-dir?

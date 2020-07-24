@@ -2,6 +2,8 @@ $ oc explain limitranges.spec.limits
 $ oc explain deployment.spec.template.spec.nodeSelector
 $ oc api-resources
 
+Recordar: meter recursos para un container
+$oc set resource 
 
 
 oc cluster-info
