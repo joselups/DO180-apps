@@ -212,6 +212,25 @@ volumes:
 
 Control de programacion
 
+
+1. Filtrado de nodos. 
+	Taint en nodos
+	tolerancia en pods
+	
+2. Priorización de la lista de nodos filtrada.
+	Un uso común para las reglas de afinidad es programar pods relacionados para que estén
+	cerca uno del otro por motivos de rendimiento. Un ejemplo es usar el mismo backbone de red
+	para pods que se sincronizan entre sí.
+	Un uso común para las reglas de antiafinidad es programar pods relacionados para
+	que no estén tan cerca uno del otro, para una alta disponibilidad. Un ejemplo es evitar la
+	programación de todos los pods de la misma aplicación al mismo nodo.
+
+3. Selección del nodo más apto.
+	La lista de candidatos se ordena según estas puntuaciones, y el nodo con la mayor puntuación
+	se selecciona para alojar el pod. Si varios nodos tienen la misma puntuación alta, se
+	selecciona uno con el método round robin.
+
+
 Etiquetado de nodos
 Agregar etiqueta
 $ oc label node node1.us-west-1.compute.internal env=dev [--overwrite]
@@ -285,6 +304,8 @@ spec:
    services: "10"
    cpu: "1300m"
    memory: "1.5Gi"
+   requests.cpu: "50m"
+   limit.cpu: "500m"
 
 $ oc create --save-config -f dev-quota.yml
 
@@ -372,15 +393,15 @@ ClusterAutoScaler
 apiVersion: "autoscaling.openshift.io/v1"
 kind: "ClusterAutoscaler"
 metadata:
-name: "default"
+ name: "default"
 spec:
-podPriorityThreshold: -10
-resourceLimits:
-maxNodesTotal: 6
+ podPriorityThreshold: -10
+ resourceLimits:
+  maxNodesTotal: 6
 scaleDown:
-enabled: true
-delayAfterAdd: 3m
-unneededTime: 3m
+ enabled: true
+ delayAfterAdd: 3m
+ unneededTime: 3m
 
 
 MachineAutoScaler
